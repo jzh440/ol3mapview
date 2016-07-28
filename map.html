@@ -23,13 +23,55 @@
             width: 100%;
             height: 95%;
         }
-
+        .button {
+            width:70px;
+            height:20px;
+            border:0;
+            font-family:微软雅黑;
+            font-size:12px;
+        }
     </style>
-</head>
+
+    <style>
+        .tooltip {
+            position: relative;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+            color: white;
+            padding: 4px 8px;
+            opacity: 0.7;
+            white-space: nowrap;
+        }
+        .tooltip-measure {
+            opacity: 1;
+            font-weight: bold;
+        }
+        .tooltip-static {
+            background-color: #ffcc33;
+            color: black;
+            border: 1px solid white;
+        }
+        .tooltip-measure:before,
+        .tooltip-static:before {
+            border-top: 6px solid rgba(0, 0, 0, 0.5);
+            border-right: 6px solid transparent;
+            border-left: 6px solid transparent;
+            content: "";
+            position: absolute;
+            bottom: -6px;
+            margin-left: -7px;
+            left: 50%;
+        }
+        .tooltip-static:before {
+            border-top-color: #ffcc33;
+        }
+     </style>
 
 <body>
-<div id="map">
+<div style="width: 100%;height: 30px">
+    <input class="button" type="button" id="measure" value="测量">
 </div>
+<div id="map"></div>
 <select id="layer-select">
     <option value="矢量图1" selected>矢量图1</option>
     <option value="矢量图2" >矢量图2</option>
@@ -78,11 +120,164 @@
         resolutions:[]
     };
 
+    var OLDraw = function () {
+
+    };
+
+    OLDraw.prototype = {
+        olMap:null,
+        /**
+         * Currently drawn feature.
+         * @type {ol.Feature}
+         */
+        sketch:null,
+
+        /**
+         * Currently drawn listener.
+         * @type {object}
+         */
+        listener:null,
+        /**
+         * The help tooltip element.
+         * @type {Element}
+         */
+        helpTooltipElement:null,
+
+        /**
+         * Overlay to show the help messages.
+         * @type {ol.Overlay}
+         */
+        helpTooltip:null,
+
+        /**
+         * The measure tooltip element.
+         * @type {Element}
+         */
+        measureTooltipElement:null,
+
+        /**
+         * Overlay to show the measurement.
+         * @type {ol.Overlay}
+         */
+         measureTooltip:null,
+
+        /**
+         * Message to show when the user is drawing a polygon.
+         * @type {string}
+         */
+        continuePolygonMsg : 'Click to continue drawing the polygon',
+
+        /**
+         * Message to show when the user is drawing a line.
+         * @type {string}
+         */
+        continueLineMsg : 'Click to continue drawing the line',
+
+        drawStyle: new ol.style.Style({
+            fill: new ol.style.Fill({
+                color: 'rgba(255, 255, 255, 0.2)'
+            }),
+            stroke: new ol.style.Stroke({
+                color: 'rgba(0, 0, 0, 0.5)',
+                lineDash: [10, 10],
+                width: 2
+            }),
+            image: new ol.style.Circle({
+                radius: 5,
+                stroke: new ol.style.Stroke({
+                    color: 'rgba(0, 0, 0, 0.7)'
+                }),
+                fill: new ol.style.Fill({
+                    color: 'rgba(255, 255, 255, 0.2)'
+                })
+            })
+        }),
+        /**
+         * Creates a new measure tooltip
+         */
+        onTooltip:function (olMap) {
+            if (this.measureTooltipElement) {
+                this.measureTooltipElement.parentNode.removeChild(this.measureTooltipElement);
+            }
+            this.measureTooltipElement = document.createElement('div');
+            this.measureTooltipElement.className = 'tooltip tooltip-measure';
+            this.measureTooltip = new ol.Overlay({
+                element: this.measureTooltipElement,
+                offset: [0, -15],
+                positioning: 'bottom-center'
+            });
+            console.log("创建measureTooltipElement成功："+this.measureTooltipElement);
+            olMap.addOverlay(this.measureTooltip);
+        },
+
+        /**
+         * Creates a new help tooltip
+         */
+        onHelpTooltip:function (olMap) {
+            if (this.helpTooltipElement) {
+                this.helpTooltipElement.parentNode.removeChild(this.helpTooltipElement);
+            }
+            this.helpTooltipElement = document.createElement('div');
+            this.helpTooltipElement.className = 'tooltip hidden';
+            this.helpTooltip = new ol.Overlay({
+                element: this.helpTooltipElement,
+                offset: [15, 0],
+                positioning: 'center-left'
+            });
+            console.log("创建helpTooltipElement成功："+this.helpTooltipElement);
+            olMap.addOverlay(this.helpTooltip);
+        },
+        onDrawStart:function(evt){
+            this.sketch = evt.feature;
+            var tooltipCoord = evt.coordinate;
+            this.listener = this.sketch.getGeometry().on('change', function(evt) {
+                var geom = evt.target;
+                if (geom instanceof ol.geom.Polygon) {
+                    tooltipCoord = geom.getInteriorPoint().getCoordinates();
+                } else if (geom instanceof ol.geom.LineString) {
+                    tooltipCoord = geom.getLastCoordinate();
+                }
+                this.measureTooltipElement.innerHTML = "100km";
+                this.measureTooltip.setPosition(tooltipCoord);
+            });
+        },
+        onDrawEnd:function(){
+            this.measureTooltipElement.className = 'tooltip tooltip-static';
+            this.measureTooltip.setOffset([0, -7]);
+            this.sketch = null;
+            this.measureTooltipElement = null;
+            this.onTooltip(this.olMap);
+            ol.Observable.unByKey(this.listener);
+        },
+        onPointerMove: function(evt) {
+           // this.onHelpTooltip(this.olMap);
+            if (evt.dragging) {
+                return;
+            }
+            /** @type {string} */
+            var helpMsg = 'Click to start drawing';
+            if (this.sketch) {
+                var geom = (this.sketch.getGeometry());
+                if (geom instanceof ol.geom.Polygon) {
+                    helpMsg = this.continuePolygonMsg;
+                } else if (geom instanceof ol.geom.LineString) {
+                    helpMsg = this.continueLineMsg;
+                }
+            }
+            console.log("helpMsg:"+helpMsg);
+            this.helpTooltipElement.innerHTML = helpMsg;
+            this.helpTooltip.setPosition(evt.coordinate);
+            this.helpTooltipElement.classList.remove('hidden');
+        }
+    };
+
     //定义hdmap API对象
     var HdMap = function() {
     };
     //地图对象
     HdMap.prototype = {
+        olDraw:null, //画笔
+
         olMap:null,
 
         layers:[],
@@ -160,11 +355,13 @@
                 maxResolution: mapServerParameter.resolutions[0],//最大分辨率
                 minResolution: mapServerParameter.resolutions[mapServerParameter.resolutions.length - 1]//最小分辨率
             });
-
             this.olMap = new ol.Map({
                 target: 'map',
                 controls:  ol.control.defaults().extend([
-                    new ol.control.FullScreen()
+                    new ol.control.ScaleLine(),  //添加比例尺控件
+                    new ol.control.FullScreen(), //添加全屏控件
+                    new ol.control.ZoomSlider(), //添加缩放滑动控件
+                    new ol.control.OverviewMap()
                 ]),
                 //pixelRatio: {},
                 //interactions:{},
@@ -174,7 +371,7 @@
                 loadTilesWhileAnimating: true,
                 loadTilesWhileInteracting: true,
                 //logo: "恒达时讯",
-                //overlays:{},
+                overlays:[],
                 //renderer:{},
                 view: mapView
             });
@@ -183,11 +380,19 @@
         zoom:function (level) {
             this.olMap.getView().setZoom(level);
         },
+        zoomToExtend:function (extend) {
+            var view = this.olMap.getView();
+            var size = this.olMap.getSize();
+            var center = ol.extent.getCenter(extend);
+            view.fit(extend, size);
+            view.setCenter(center);
+        },
         addMultiPoint:function (features) {
             if(features == undefined || features == null || features.length < 1){
                 return;
             }
             var olFeature;
+            var multiGeometry = [];
             for(var i = 0 ,len = features.length ;i < len ;i++){
                 var format = new ol.format.WKT();
                 var feature = format.readGeometry(features[i].geometry);
@@ -213,50 +418,83 @@
                 olFeature = new ol.Feature({
                     id:features[i].attributes.ID,
                     name: '我标的点',
-                    //style:style,//应用单个样式
+                    //style:style,//应用单个样式无效
                     geometry:  feature,
-                    labelPoint:feature
+                    labelPoint:feature//label 作用
                 });
-                olFeature.setStyle(style);
+                olFeature.setStyle(style);//应用单个样式有效
                 this.olVectorLayer.getSource().addFeature(olFeature);
+                var extent = olFeature.getGeometry().getExtent();
+                multiGeometry.push([[extent[0], extent[1]], [extent[2], extent[3]]]);
             }
             //this.olVectorLayer.setStyle(this.olStyle.Point);//批量样式应用
             this.olMap.addLayer(this.olVectorLayer);
+            var boxExtend = new ol.geom.MultiLineString(multiGeometry, null).getExtent();
+            this.zoomToExtend(boxExtend);
         },
         addMultiLine:function (features) {
             if(features == undefined || features == null || features.length < 1){
                 return;
             }
-
-            var lineStyle = new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: '#0000EE',
-                    width: 4
-                })
-            });
             var olFeature;
+
+            var multiGeometry = [];
             for(var i = 0 ,len = features.length ;i < len ;i++){
                 var format = new ol.format.WKT();
                 var feature = format.readGeometry(features[i].geometry);
-               /* var feature = format.readFeature(features[i].geometry, {
-                    dataProjection: 'EPSG:4326',
-                    featureProjection: 'EPSG:3857'
-                });*/
                 olFeature = new ol.Feature({
-                    //id:features[i].attributes.ID,
+                    id:features[i].attributes.ID,
                     name: '我标的线',
-                    //style: this.olStyle.LineString,//单个样式
+                    //style: lineStyle,//单个样式应用无效
                     geometry:  feature
                     //labelPoint:feature
                 });
-                olFeature.setStyle(lineStyle);
+                //olFeature.setStyle(this.olStyle.LineString);//单个样式应用有效
                 this.olVectorLayer.getSource().addFeature(olFeature);
+                var extent = olFeature.getGeometry().getExtent();
+                multiGeometry.push([[extent[0], extent[1]], [extent[2], extent[3]]]);
             }
-            //this.olVectorLayer.setStyle(this.olStyle.LineString);//批量样式应用
+            this.olVectorLayer.setStyle(this.olStyle.LineString);//批量样式应用有效
             this.olMap.addLayer(this.olVectorLayer);
+            var boxExtend = new ol.geom.MultiLineString(multiGeometry, null).getExtent();
+            this.zoomToExtend(boxExtend);
         },
-        autoStyle: function(feature) {
-            return this.olStyle[feature.getGeometry().getType()];
+        onDraw:function(type){
+            var draw = new OLDraw();
+            draw.olMap =  this.olMap;
+            this.olDraw = new ol.interaction.Draw({
+                source: this.olVectorSource,
+                type:  (type == 'area' ? 'Polygon' : 'LineString'),
+                style: draw.drawStyle
+            });
+            this.olMap.addInteraction(this.olDraw);
+            draw.onTooltip(this.olMap);
+            draw.onHelpTooltip(this.olMap);
+            this.olMap.on('pointermove',function(evt) {
+                // this.onHelpTooltip(this.olMap);
+                if (evt.dragging) {
+                    return;
+                }
+                /** @type {string} */
+                var helpMsg = 'Click to start drawing';
+                if (this.sketch) {
+                    var geom = (this.sketch.getGeometry());
+                    if (geom instanceof ol.geom.Polygon) {
+                        helpMsg = this.continuePolygonMsg;
+                    } else if (geom instanceof ol.geom.LineString) {
+                        helpMsg = this.continueLineMsg;
+                    }
+                }
+                console.log("helpMsg:"+helpMsg);
+                draw.helpTooltipElement.innerHTML = helpMsg;
+                draw.helpTooltip.setPosition(evt.coordinate);
+                draw.helpTooltipElement.classList.remove('hidden');
+            });
+            this.olMap.getViewport().addEventListener('mouseout', function() {
+                draw.helpTooltipElement.classList.add('hidden');
+            });
+            this.olDraw.on('drawstart',draw.onDrawStart, this);
+            this.olDraw.on('drawend', draw.onDrawEnd, this);
         },
         olStyle:{
             'Point': new ol.style.Style({
@@ -271,8 +509,8 @@
             }),
             'LineString': new ol.style.Style({
                 stroke: new ol.style.Stroke({
-                    color: 'green',
-                    width: 1
+                    color: '#0000EE',
+                    width: 4
                 })
             }),
             'MultiLineString': new ol.style.Style({
@@ -332,8 +570,9 @@
                     color: 'rgba(255,0,0,0.2)'
                 })
             })
-        },
+        }
     };
+
 
     //Demo 应用
     var hdmap = new HdMap();
@@ -374,7 +613,7 @@
                 hdmap.init(parameter);
                 hdmap.olMap.addLayer(mapLayer);
                 imageTileLayer();
-              /*  $.ajax({
+                /*$.ajax({
                     url: "json/points.json",
                     dataType: 'json',
                     success: function (data) {
@@ -390,6 +629,10 @@
                     }
                 });
             }
+        });
+
+        $("#measure").click(function(){
+            hdmap.onDraw("LineString");
         });
     });
 
