@@ -1,0 +1,32 @@
+.mouse-position-wrapper{
+    width:300px;
+    height:40px;
+    color:#FFFFFF;
+    position:absolute;
+    right:-125px;
+    bottom:150px;
+    z-index:999;
+}
+.overview-map-wapper{
+    width:300px;
+    height:10px;
+    color:#FFFFFF;
+    position:absolute;
+    right:-120px;
+    bottom:0px;
+    z-index:999;
+}
+.x-zoom-icons {
+    position: absolute;
+    left: 0.5em;
+    top: 5em;
+    z-index: 999;
+}
+.x-zoom-icons span{
+    display: block;
+    padding: 7px;
+    cursor: pointer;
+    border: 1.5px solid rgba(255, 255, 255, 0.5);
+    border-radius: 5px;
+    background-color: rgb(255, 255, 255);
+}

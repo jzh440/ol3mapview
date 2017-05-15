@@ -3,9 +3,10 @@
     <meta charset="utf-8"/>
     <title>地图页面</title>
     <link rel="stylesheet" typw="text/css" href="css/ol.css"/>
+    <link rel="stylesheet" type="text/css" href="css/ol3.css"/>
     <link rel="stylesheet" type="text/css" href="css/fonticon/iconfont.css">
     <link rel="stylesheet" type="text/css" href="css/popup.css">
-
+    <link rel="stylesheet" type="text/css" href="css/measure.css">
     <style type="text/css">
         html {
             overflow: hidden;
@@ -21,7 +22,7 @@
         }
         #map {
             width: 100%;
-            height: 95%;
+            height: 100%;
         }
         .button {
             width:70px;
@@ -32,670 +33,532 @@
         }
     </style>
 
-    <style>
-        .tooltip {
-            position: relative;
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 4px;
-            color: white;
-            padding: 4px 8px;
-            opacity: 0.7;
-            white-space: nowrap;
-        }
-        .tooltip-measure {
-            opacity: 1;
-            font-weight: bold;
-        }
-        .tooltip-static {
-            background-color: #ffcc33;
-            color: black;
-            border: 1px solid white;
-        }
-        .tooltip-measure:before,
-        .tooltip-static:before {
-            border-top: 6px solid rgba(0, 0, 0, 0.5);
-            border-right: 6px solid transparent;
-            border-left: 6px solid transparent;
-            content: "";
-            position: absolute;
-            bottom: -6px;
-            margin-left: -7px;
-            left: 50%;
-        }
-        .tooltip-static:before {
-            border-top-color: #ffcc33;
-        }
-     </style>
-
 <body>
-<div style="width: 100%;height: 30px">
-    <input class="button" type="button" id="measure" value="测量">
+<div style="width: 100%;height: 30px;">
+    <input class="button" type="button" id="btn-addPoints" value="添加点">
+    <input class="button" type="button" id="btn-addPolylines" value="添加线">
+    <input class="button" type="button" id="btn-addPolygons" value="添加面">
+    <input class="button" type="button" id="btn-overlay" value="添加overlay">
+    <input class="button" type="button" id="btn-clickEvent" value="添加事件">
+    <select id="selecttype" style="width: 80px" onchange="changeSelectType()"  >
+        <option value="none" selected>select事件</option>
+        <option value="click">点击</option>
+        <option value="pointerMove">鼠标经过</option>
+    </select>
+    <input class="button" type="button" id="btn-singleclick-query" value="单击矢量查询">
+    <input class="button" type="button" id="btn-click-identify-query" value="单击i查询">
+    <input class="button" type="button" id="btn-zoom-in" value="拉框放大">
+    <input class="button" type="button" id="btn-zoom-out" value="拉框缩小">
+    <input class="button" type="button" id="btn-dragbox-query" value="拉框查询">
+    <input class="button" type="button" id="btn-change-layer" value="切换底图">
+    <select id="changelayer" style="width: 80px" onchange="changeLayer()"  >
+        <option value="none" selected>none</option>
+        <option value="baseLayer">baseLayer</option>
+        <option value="satelliteLayer">satelliteLayer</option>
+    </select>
+    <input class="button" type="button" id="btn-add-wfs" value="叠加wfs">
+    <input class="button" type="button" id="btn-zoom-clear" value="清除交互">
+    <input class="button" type="button" id="btn-measure-tool" value="测量工具">
 </div>
-<div id="map"></div>
-<select id="layer-select">
-    <option value="矢量图1" selected>矢量图1</option>
-    <option value="矢量图2" >矢量图2</option>
-</select>
-
-
+<div id="map">
+</div>
+<div id="overview-map" class="overview-map-wapper">
+    <div class="custom-overview-map"></div>
+</div>
+<div  id="mouse-position" class="mouse-position-wrapper">
+    <div class="custom-mouse-position"></div>
+</div>
 
 </body>
 
 <script type="text/javascript" src="js/public/ol.js"></script>
 <script type="text/javascript" src="js/public/jquery-1.12.3.min.js"></script>
+
 <script type="text/javascript" >
 
+    var wkt = 'POLYGON((115.4537241581 25.5924977655,115.2537241581 25.2924977655,115.3537241581 25.3924977655,115.5537241581 25.5924977655))';
+    //var wkt = 'POINT(115.4537241581 25.5924977655)';
 
-    /**
-     * MapServer 对象
-     */
-    var MapServerParameter = function(){
-    };
+    var format = new ol.format.WKT();
 
-    /**
-     * MapServer pjson 参数对象
-     * @type {{
-     * layerUrl: string ,
-     * layerName: string ,
-     * center: Array,
-     * wkid: string,
-     * fullExtent: Array,
-     * initialExtent: Array,
-     * projection: {},
-     * tileSize: Array,
-     * origin: Array,
-     * resolutions: Array
-     * }}
-     */
-    MapServerParameter.prototype = {
-        layerUrl:'',
-        layerName:"",
-        center : [],
-        wkid:"4326",
-        fullExtent: [],
-        initialExtent :[],
-        projection:{},
-        tileSize:[],
-        origin:[],
-        resolutions:[]
-    };
-
-    var OLDraw = function () {
-
-    };
-
-    OLDraw.prototype = {
-        olMap:null,
-        /**
-         * Currently drawn feature.
-         * @type {ol.Feature}
-         */
-        sketch:null,
-
-        /**
-         * Currently drawn listener.
-         * @type {object}
-         */
-        listener:null,
-        /**
-         * The help tooltip element.
-         * @type {Element}
-         */
-        helpTooltipElement:null,
-
-        /**
-         * Overlay to show the help messages.
-         * @type {ol.Overlay}
-         */
-        helpTooltip:null,
-
-        /**
-         * The measure tooltip element.
-         * @type {Element}
-         */
-        measureTooltipElement:null,
-
-        /**
-         * Overlay to show the measurement.
-         * @type {ol.Overlay}
-         */
-         measureTooltip:null,
-
-        /**
-         * Message to show when the user is drawing a polygon.
-         * @type {string}
-         */
-        continuePolygonMsg : 'Click to continue drawing the polygon',
-
-        /**
-         * Message to show when the user is drawing a line.
-         * @type {string}
-         */
-        continueLineMsg : 'Click to continue drawing the line',
-
-        drawStyle: new ol.style.Style({
-            fill: new ol.style.Fill({
-                color: 'rgba(255, 255, 255, 0.2)'
-            }),
-            stroke: new ol.style.Stroke({
-                color: 'rgba(0, 0, 0, 0.5)',
-                lineDash: [10, 10],
-                width: 2
-            }),
-            image: new ol.style.Circle({
-                radius: 5,
-                stroke: new ol.style.Stroke({
-                    color: 'rgba(0, 0, 0, 0.7)'
-                }),
-                fill: new ol.style.Fill({
-                    color: 'rgba(255, 255, 255, 0.2)'
-                })
-            })
-        }),
-        /**
-         * Creates a new measure tooltip
-         */
-        onTooltip:function (olMap) {
-            if (this.measureTooltipElement) {
-                this.measureTooltipElement.parentNode.removeChild(this.measureTooltipElement);
-            }
-            this.measureTooltipElement = document.createElement('div');
-            this.measureTooltipElement.className = 'tooltip tooltip-measure';
-            this.measureTooltip = new ol.Overlay({
-                element: this.measureTooltipElement,
-                offset: [0, -15],
-                positioning: 'bottom-center'
-            });
-            console.log("创建measureTooltipElement成功："+this.measureTooltipElement);
-            olMap.addOverlay(this.measureTooltip);
-        },
-
-        /**
-         * Creates a new help tooltip
-         */
-        onHelpTooltip:function (olMap) {
-            if (this.helpTooltipElement) {
-                this.helpTooltipElement.parentNode.removeChild(this.helpTooltipElement);
-            }
-            this.helpTooltipElement = document.createElement('div');
-            this.helpTooltipElement.className = 'tooltip hidden';
-            this.helpTooltip = new ol.Overlay({
-                element: this.helpTooltipElement,
-                offset: [15, 0],
-                positioning: 'center-left'
-            });
-            console.log("创建helpTooltipElement成功："+this.helpTooltipElement);
-            olMap.addOverlay(this.helpTooltip);
-        },
-        onDrawStart:function(evt){
-            this.sketch = evt.feature;
-            var tooltipCoord = evt.coordinate;
-            this.listener = this.sketch.getGeometry().on('change', function(evt) {
-                var geom = evt.target;
-                if (geom instanceof ol.geom.Polygon) {
-                    tooltipCoord = geom.getInteriorPoint().getCoordinates();
-                } else if (geom instanceof ol.geom.LineString) {
-                    tooltipCoord = geom.getLastCoordinate();
-                }
-                this.measureTooltipElement.innerHTML = "100km";
-                this.measureTooltip.setPosition(tooltipCoord);
-            });
-        },
-        onDrawEnd:function(){
-            this.measureTooltipElement.className = 'tooltip tooltip-static';
-            this.measureTooltip.setOffset([0, -7]);
-            this.sketch = null;
-            this.measureTooltipElement = null;
-            this.onTooltip(this.olMap);
-            ol.Observable.unByKey(this.listener);
-        },
-        onPointerMove: function(evt) {
-           // this.onHelpTooltip(this.olMap);
-            if (evt.dragging) {
-                return;
-            }
-            /** @type {string} */
-            var helpMsg = 'Click to start drawing';
-            if (this.sketch) {
-                var geom = (this.sketch.getGeometry());
-                if (geom instanceof ol.geom.Polygon) {
-                    helpMsg = this.continuePolygonMsg;
-                } else if (geom instanceof ol.geom.LineString) {
-                    helpMsg = this.continueLineMsg;
-                }
-            }
-            console.log("helpMsg:"+helpMsg);
-            this.helpTooltipElement.innerHTML = helpMsg;
-            this.helpTooltip.setPosition(evt.coordinate);
-            this.helpTooltipElement.classList.remove('hidden');
-        }
-    };
-
-    //定义hdmap API对象
-    var HdMap = function() {
-    };
-    //地图对象
-    HdMap.prototype = {
-        olDraw:null, //画笔
-
-        olMap:null,
-
-        layers:[],
-
-        olVectorSource: new ol.source.Vector({
-            features:[]
-        }),
-
-        olVectorLayer :new ol.layer.Vector({
-            layerName: "default",
-            //style:this.autoStyle,
-            source: new ol.source.Vector({
-                wrapX: false
-            })
-        }),
-
-        tileLayer:function(paramater){
-
-            var urlTemplate = paramater.layerUrl + "/tile/{z}/{y}/{x}";
-
-            var tileGrid = new ol.tilegrid.TileGrid({
-                tileSize: paramater.tileSize,
-                origin: paramater.origin,
-                extent: paramater.fullExtent,
-                resolutions: paramater.resolutions
-            });
-
-            var tileSource = new ol.source.XYZ({
-                url: urlTemplate,
-                //urls:[],
-                //attributions:{},
-                cacheSize: 2048,
-                //crossOrigin:"",
-                //logo: "恒达时讯",
-                opaque: false, //不透明的
-                projection: paramater.projection,
-                //minZoom: 1,
-                //maxZoom: 12,
-                wrapX: true,//是否水平包裹世界
-                tileGrid: tileGrid,
-                tileLoadFunction: function (imageTile, src) {
-                    imageTile.getImage().src = src;
-                    console.log("123");
-                },
-                tileUrlFunction: function (tileCoord) {
-                    var url = urlTemplate.replace('{z}', (tileCoord[0]).toString())
-                            .replace('{x}', tileCoord[1].toString())
-                            .replace('{y}', (-tileCoord[2] - 1).toString());
-                    return url;
-                }
-            });
-
-            var mapLayer = new ol.layer.Tile({
-                opacity: 1, //透明度 (0-1)
-                preload: 0, //预加载
-                //map:{}, //图层叠加
-                visible: true,
-                extent: paramater.fullExtent,
-                layerName:paramater.layerName,
-                useInterimTilesOnError: true,//使用临时切片
-                source: tileSource
-            });
-            return mapLayer;
-        },
-        //地图初始化
-        init:function(mapServerParameter) {
-
-            var mapLayer = this.tileLayer(mapServerParameter);
-
-            var mapView =  new ol.View({
-                zoom: 0,
-                projection: mapServerParameter.projection,
-                extent: mapServerParameter.fullExtent,    //分层渲染的边界范围
-                center: ol.proj.fromLonLat(mapServerParameter.center, ol.proj.get("EPSG:"+mapServerParameter.wkid)),
-                maxResolution: mapServerParameter.resolutions[0],//最大分辨率
-                minResolution: mapServerParameter.resolutions[mapServerParameter.resolutions.length - 1]//最小分辨率
-            });
-            this.olMap = new ol.Map({
-                target: 'map',
-                controls:  ol.control.defaults().extend([
-                    new ol.control.ScaleLine(),  //添加比例尺控件
-                    new ol.control.FullScreen(), //添加全屏控件
-                    new ol.control.ZoomSlider(), //添加缩放滑动控件
-                    new ol.control.OverviewMap()
-                ]),
-                //pixelRatio: {},
-                //interactions:{},
-                // 键盘事件
-                //keyboardEventTarget:{},
-                layers: [mapLayer],
-                loadTilesWhileAnimating: true,
-                loadTilesWhileInteracting: true,
-                //logo: "恒达时讯",
-                overlays:[],
-                //renderer:{},
-                view: mapView
-            });
-
-        },
-        zoom:function (level) {
-            this.olMap.getView().setZoom(level);
-        },
-        zoomToExtend:function (extend) {
-            var view = this.olMap.getView();
-            var size = this.olMap.getSize();
-            var center = ol.extent.getCenter(extend);
-            view.fit(extend, size);
-            view.setCenter(center);
-        },
-        addMultiPoint:function (features) {
-            if(features == undefined || features == null || features.length < 1){
-                return;
-            }
-            var olFeature;
-            var multiGeometry = [];
-            for(var i = 0 ,len = features.length ;i < len ;i++){
-                var format = new ol.format.WKT();
-                var feature = format.readGeometry(features[i].geometry);
-                //为什莫设置style 无效
-                var style = new ol.style.Style({
-                    image: new ol.style.Icon({
-                        anchor: [0.5, 50],
-                        rotation: 0, //图片旋转
-                        anchorXUnits: 'fraction',
-                        anchorYUnits: 'pixels',
-                        opacity: 0.75,
-                        src: "icon/marker.png"
-                    }),
-                    text: new ol.style.Text({
-                        text: (i+1)+"",
-                        offsetX: 0.5,
-                        offsetY: -40,
-                        fill: new ol.style.Fill({
-                            color: "#FFFFFF"
-                        })
-                    })
-                });
-                olFeature = new ol.Feature({
-                    id:features[i].attributes.ID,
-                    name: '我标的点',
-                    //style:style,//应用单个样式无效
-                    geometry:  feature,
-                    labelPoint:feature//label 作用
-                });
-                olFeature.setStyle(style);//应用单个样式有效
-                this.olVectorLayer.getSource().addFeature(olFeature);
-                var extent = olFeature.getGeometry().getExtent();
-                multiGeometry.push([[extent[0], extent[1]], [extent[2], extent[3]]]);
-            }
-            //this.olVectorLayer.setStyle(this.olStyle.Point);//批量样式应用
-            this.olMap.addLayer(this.olVectorLayer);
-            var boxExtend = new ol.geom.MultiLineString(multiGeometry, null).getExtent();
-            this.zoomToExtend(boxExtend);
-        },
-        addMultiLine:function (features) {
-            if(features == undefined || features == null || features.length < 1){
-                return;
-            }
-            var olFeature;
-
-            var multiGeometry = [];
-            for(var i = 0 ,len = features.length ;i < len ;i++){
-                var format = new ol.format.WKT();
-                var feature = format.readGeometry(features[i].geometry);
-                olFeature = new ol.Feature({
-                    id:features[i].attributes.ID,
-                    name: '我标的线',
-                    //style: lineStyle,//单个样式应用无效
-                    geometry:  feature
-                    //labelPoint:feature
-                });
-                //olFeature.setStyle(this.olStyle.LineString);//单个样式应用有效
-                this.olVectorLayer.getSource().addFeature(olFeature);
-                var extent = olFeature.getGeometry().getExtent();
-                multiGeometry.push([[extent[0], extent[1]], [extent[2], extent[3]]]);
-            }
-            this.olVectorLayer.setStyle(this.olStyle.LineString);//批量样式应用有效
-            this.olMap.addLayer(this.olVectorLayer);
-            var boxExtend = new ol.geom.MultiLineString(multiGeometry, null).getExtent();
-            this.zoomToExtend(boxExtend);
-        },
-        onDraw:function(type){
-            var draw = new OLDraw();
-            draw.olMap =  this.olMap;
-            this.olDraw = new ol.interaction.Draw({
-                source: this.olVectorSource,
-                type:  (type == 'area' ? 'Polygon' : 'LineString'),
-                style: draw.drawStyle
-            });
-            this.olMap.addInteraction(this.olDraw);
-            draw.onTooltip(this.olMap);
-            draw.onHelpTooltip(this.olMap);
-            this.olMap.on('pointermove',function(evt) {
-                // this.onHelpTooltip(this.olMap);
-                if (evt.dragging) {
-                    return;
-                }
-                /** @type {string} */
-                var helpMsg = 'Click to start drawing';
-                if (this.sketch) {
-                    var geom = (this.sketch.getGeometry());
-                    if (geom instanceof ol.geom.Polygon) {
-                        helpMsg = this.continuePolygonMsg;
-                    } else if (geom instanceof ol.geom.LineString) {
-                        helpMsg = this.continueLineMsg;
-                    }
-                }
-                console.log("helpMsg:"+helpMsg);
-                draw.helpTooltipElement.innerHTML = helpMsg;
-                draw.helpTooltip.setPosition(evt.coordinate);
-                draw.helpTooltipElement.classList.remove('hidden');
-            });
-            this.olMap.getViewport().addEventListener('mouseout', function() {
-                draw.helpTooltipElement.classList.add('hidden');
-            });
-            this.olDraw.on('drawstart',draw.onDrawStart, this);
-            this.olDraw.on('drawend', draw.onDrawEnd, this);
-        },
-        olStyle:{
-            'Point': new ol.style.Style({
-                image: new ol.style.Icon({
-                        anchor: [0.5, 50],
-                        rotation: 0, //图片旋转
-                        anchorXUnits: 'fraction',
-                        anchorYUnits: 'pixels',
-                        opacity: 0.75,
-                        src: "icon/marker.png"
-                })
-            }),
-            'LineString': new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: '#0000EE',
-                    width: 4
-                })
-            }),
-            'MultiLineString': new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: 'green',
-                    width: 1
-                })
-            }),
-            'MultiPoint': new ol.style.Style({
-                image: new ol.style.Circle({
-                    radius: 5,
-                    fill: null,
-                    stroke: new ol.style.Stroke({color: 'red', width: 1})
-                })
-            }),
-            'MultiPolygon': new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: 'yellow',
-                    width: 1
-                }),
-                fill: new ol.style.Fill({
-                    color: 'rgba(255, 255, 0, 0.1)'
-                })
-            }),
-            'Polygon': new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: 'blue',
-                    lineDash: [4],
-                    width: 3
-                }),
-                fill: new ol.style.Fill({
-                    color: 'rgba(0, 0, 255, 0.1)'
-                })
-            }),
-            'GeometryCollection': new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: 'magenta',
-                    width: 2
-                }),
-                fill: new ol.style.Fill({
-                    color: 'magenta'
-                }),
-                image: new ol.style.Circle({
-                    radius: 10,
-                    fill: null,
-                    stroke: new ol.style.Stroke({
-                        color: 'magenta'
-                    })
-                })
-            }),
-            'Circle': new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: 'red',
-                    width: 2
-                }),
-                fill: new ol.style.Fill({
-                    color: 'rgba(255,0,0,0.2)'
-                })
-            })
-        }
-    };
-
-
-    //Demo 应用
-    var hdmap = new HdMap();
-
-    var mapConfig = {
-        target:"map",
-        center : [115.657373, 28.667832],
-        layerName:"矢量地图",
-        layerUrl:"http://171.34.40.68:6080/arcgis/rest/services/JXMAP_2016/MapServer"
-    };
-
-    var parameter = new MapServerParameter();
-    $(document).ready(function () {
-        //服务参数拾取
-        $.ajax({
-            url: mapConfig.layerUrl+"/?f=pjson",
-            dataType: 'jsonp',
-            async:false,
-            success: function (data) {
-                if (data.error) {
-                    console.error(data.error.message + '\n' +data.error.details.join('\n'));
-                    return;
-                };
-                parameter.layerUrl = mapConfig.layerUrl;
-                parameter.center = mapConfig.center;
-                parameter.wkid = data.spatialReference.wkid;
-                parameter.fullExtent = [data.fullExtent.xmin, data.fullExtent.ymin, data.fullExtent.xmax, data.fullExtent.ymax];
-                parameter.origin = [data.tileInfo.origin.x, data.tileInfo.origin.y];
-                parameter.tileSize = [data.tileInfo.cols,data.tileInfo.rows];
-                parameter.projection = ol.proj.get("EPSG:" + data.spatialReference.wkid);
-                var len = data.tileInfo.lods.length;
-                var resolutions = [];
-                for (var i = 0; i < len; i++) {
-                    resolutions.push(data.tileInfo.lods[i].resolution);
-                }
-                parameter.resolutions = resolutions;
-                var mapLayer = hdmap.tileLayer(parameter);
-                hdmap.init(parameter);
-                hdmap.olMap.addLayer(mapLayer);
-                imageTileLayer();
-                /*$.ajax({
-                    url: "json/points.json",
-                    dataType: 'json',
-                    success: function (data) {
-                        hdmap.addMultiPoint(data.features);
-                    }
-                });*/
-
-                $.ajax({
-                    url: "json/lines.json",
-                    dataType: 'json',
-                    success: function (data) {
-                        hdmap.addMultiLine(data.features);
-                    }
-                });
-            }
-        });
-
-        $("#measure").click(function(){
-            hdmap.onDraw("LineString");
-        });
+    var feature = format.readFeature(wkt, {
+        dataProjection: 'EPSG:4326',
+        featureProjection: 'EPSG:3857'
     });
 
-    var styles = [
-        '矢量图1',
-        '矢量图2'
-    ];
+    var vector = new ol.layer.Vector({
+        source: new ol.source.Vector({
+            features: [feature]
+        })
+    });
 
-    var select = document.getElementById('layer-select');
-    function onChange() {
-        var style = select.value;
-        for (var i = 0, ii = hdmap.layers.length; i < ii; ++i) {
-            if(style == styles[i]){
-                hdmap.init(parameter2);
-                hdmap.olMap.setVisible(true)
-                var view = hdmap.olMap.getView();
-                view.setCenter(mapConfig2.center);
-            }else{
-                hdmap.olMap.setVisible(true)
+
+    var projection = ol.proj.get("EPSG:4326");
+    var resolutions = [0.010986328383069278,0.005493164191534639,0.0027465809060368165,0.0013732916427489112,
+        6.866458213744556E-4,3.433229106872278E-4,1.716614553436139E-4,8.582953794130404E-5,
+        4.291595870115493E-5,2.1457979350577466E-5,1.0728989675288733E-5,5.363305107141452E-6];
+    var fullExtend =[109.72859368643232, 24.010266905347684,121.13105988819079, 30.76693489432357];
+    var mapCenter = [115.967882,28.665582];
+    var origin = [ -400, 399.9999999999998];
+
+
+
+    var tileGrid = new ol.tilegrid.TileGrid({
+        tileSize: '256',
+        origin: origin,
+        extent: fullExtend,
+        resolutions: resolutions
+    });
+
+    var baseLayer = new ol.layer.Tile({
+        source: new ol.source.XYZ({
+            url: 'http://171.34.40.68:6080/arcgis/rest/services/jiangxi/JXMAP_2017_2/MapServer',
+            wrapX: false,//是否包含世界地图，默认true
+            tileGrid: tileGrid,//瓦片网格
+            projection: projection,//地图投影映射
+            tileUrlFunction: function (tileCoord) {//获得给定一个瓦片地图URL坐标和投影
+                var url = "http://171.34.40.68:6080/arcgis/rest/services/jiangxi/JXMAP_2017_2/MapServer/tile/{z}/{y}/{x}".replace('{z}', (tileCoord[0]).toString())
+                        .replace('{x}', tileCoord[1].toString())
+                        .replace('{y}', (-tileCoord[2] - 1).toString());
+                return url;
             }
+        }),
+        extent:[109.72859368643232, 24.010266905347684,121.13105988819079, 30.76693489432357]
+    });
 
-        }
+    var satellitetileGrid = new ol.tilegrid.TileGrid({
+        tileSize: '256',
+        origin: origin,
+        extent: [112.90649414062517,24.26879882812496,118.72924804687517,30.278320312499964],
+        resolutions: [0.010998661129462496,0.005499329375000746,0.002749664687500373,0.0013748311540196835,6.874143872793388E-4,3.4370838337017233E-4,1.7185419168508616E-4,8.592709584254308E-5,4.296354792127154E-5,2.148177396063577E-5]
+    });
+    var satelliteLayer = new ol.layer.Tile({
+        source: new ol.source.XYZ({
+            url: 'http://171.34.40.68:6080/arcgis/rest/services/JXWX20150425/MapServer',
+            wrapX: false,//是否包含世界地图，默认true
+            tileGrid: satellitetileGrid,//瓦片网格
+            projection: projection,//地图投影映射
+            tileUrlFunction: function (tileCoord) {//获得给定一个瓦片地图URL坐标和投影
+                var url = "http://171.34.40.68:6080/arcgis/rest/services/JXWX20150425/MapServer/tile/{z}/{y}/{x}".replace('{z}', (tileCoord[0]).toString())
+                        .replace('{x}', tileCoord[1].toString())
+                        .replace('{y}', (-tileCoord[2] - 1).toString());
+                return url;
+            }
+        }),
+        extent:[112.90649414062517, 24.26879882812496,118.72924804687517, 30.278320312499964]
+    });
+
+
+    var map = new ol.Map({
+        target:'map',
+        layers: [
+            baseLayer,satelliteLayer,vector
+        ],
+        //ol.proj.transform([115.4537241581,25.5924977655],'EPSG:3857','EPSG:4326')
+        view:new ol.View({
+            center:mapCenter,
+            zoom:0,
+            projection: projection,
+            extent:fullExtend ,
+            maxResolution: resolutions[0],
+            minResolution: resolutions[resolutions.length-1]
+        }),
+        controls: ol.control.defaults({
+            rotate:true,
+            attribution:false,
+            attributionOptions: {
+                collapsible:false
+            },
+            zoom:true,
+            zoomOptions:{
+                zoomInTipLabel:"放大",
+                zoomOutTipLabel:"缩小"
+            }
+        }).extend([
+            new ol.control.OverviewMap({
+                collapsed: false,
+                collapseLabel:"鹰眼",
+                layers:this.layers,
+                view:new ol.View({
+                    projection:"EPSG:4326"
+                }),
+                target:document.getElementById('overview-map')
+            }),
+            new ol.control.MousePosition({
+                undefinedHTML: 'output',
+                projection: 'EPSG:4326',
+                coordinateFormat: function(coordinate) {
+                    return ol.coordinate.format(coordinate, '{x}, {y}', 4);
+                },
+                className: 'custom-mouse-position',
+                target: document.getElementById('mouse-position')
+            }),
+            new ol.control.Rotate({
+                autoHide: true
+            }),
+            new ol.control.ScaleLine(),
+            new ol.control.Zoom(),
+            new ol.control.ZoomSlider(),
+            new ol.control.FullScreen()
+        ])
+    });
+
+    /**
+     *  @type {ol.Coordinate} center The center of the view.
+     */
+    function zoomToExtend(extent) {
+        var view = this.map.getView();
+        var size = this.map.getSize();
+        var center = ol.extent.getCenter(extent);
+        view.fit(extent, size);
+        view.setCenter(center);
     }
-    select.addEventListener('change', onChange);
-    onChange()
+</script>
+<script>
+    //
+    function test_addPoint() {
+        var iconStyle = new ol.style.Style({
+            image: new ol.style.Icon(({
+                src: 'icon/marker.png'
+            }))
+        });
+        var iconFeature = new ol.Feature({
+            geometry: new ol.geom.Point([115.4537241581,25.5924977655]),
+        });
+        iconFeature.setStyle(iconStyle);
+        vector.getSource().addFeature(iconFeature);
+        zoomToExtend(iconFeature.getGeometry().getExtent());
+    }
+    //
+    function test_addPoints(){
+        var iconGeoms = new ol.geom.MultiPoint([]);
+        $.getJSON("json/points.json",function (data) {
+            $.each(data.features,function(index,item){
+                var iconGeometry = new ol.format.WKT().readGeometry(item.geometry);
+                var iconFeature = new ol.Feature({
+                    geometry: iconGeometry
+                });
+                var iconStyle = new ol.style.Style({
+                    image: new ol.style.Icon(({
+                        src: 'icon/marker.png'
+                    })),
+                    text: new ol.style.Text({
+                        font: "20px serif",
+                        fill: new ol.style.Fill({
+                            color: "FFFFFFF"
+                        }),
+                        text: index+1+"",
+                        offsetX: 0.5,
+                        offsetY: -3
+                    })
+                });
+                iconFeature.setStyle(iconStyle);
+                vector.getSource().addFeature(iconFeature);
+                iconGeoms.appendPoint(iconGeometry);
+            });
+            zoomToExtend(iconGeoms.getExtent());
+        })
+    }
 
-    var mapConfig2 = {
-        center : [115.657373, 28.667832],
-        layerName:"影像地图",
-        layerUrl:"http://211.101.37.251:6080/arcgis/rest/services/jxgxptmap_2015ncyw/MapServer"
-    };
+    function test_addPolylines(){
+        var iconGeoms = new ol.geom.MultiLineString([]);
+        $.getJSON("json/lines.json",function (data) {
+            $.each(data.features,function(index,item){
+                var iconGeometry = new ol.format.WKT().readGeometry(item.geometry);
+                iconGeoms.appendLineString(iconGeometry);
+                var iconFeature = new ol.Feature({
+                    geometry: iconGeometry,
+                    name: 'My Polyline'
+                });
+                iconFeature.setId(item.attributes["OBJECTID"]);
+                iconFeature.setProperties(item.attributes);
+                var iconStyle = new ol.style.Style({
+                    stroke: new ol.style.Stroke({width: 6, color: '#0000EE'})
+                });
+                iconFeature.setStyle(iconStyle);
+                vector.getSource().addFeature(iconFeature);
+            });
+            zoomToExtend(iconGeoms.getExtent());
+        })
+    }
 
-    /********加载影像地图*******/
-    var parameter2 = new MapServerParameter();
-    function imageTileLayer(){
-        $.ajax({
-            url: mapConfig2.layerUrl+"/?f=pjson",
-            dataType: 'jsonp',
-            async:false,
-            success: function (data) {
-                if (data.error) {
-                    console.error(data.error.message + '\n' +data.error.details.join('\n'));
-                    return;
-                };
-                parameter2 = new MapServerParameter();
-                parameter2.layerUrl = mapConfig2.layerUrl;
-                parameter2.center = mapConfig2.center;
-                parameter2.wkid = data.spatialReference.wkid;
-                parameter2.fullExtent = [data.fullExtent.xmin, data.fullExtent.ymin, data.fullExtent.xmax, data.fullExtent.ymax];
-                parameter2.origin = [data.tileInfo.origin.x, data.tileInfo.origin.y];
-                parameter2.tileSize = [data.tileInfo.cols,data.tileInfo.rows];
-                parameter2.projection = ol.proj.get("EPSG:" + data.spatialReference.wkid);
-                var len = data.tileInfo.lods.length;
-                var resolutions = [];
-                for (var i = 0; i < len; i++) {
-                    resolutions.push(data.tileInfo.lods[i].resolution);
-                }
-                parameter2.resolutions = resolutions;
-                var mapLayer = hdmap.tileLayer(parameter2);
-                mapLayer.setVisible(false);
-                hdmap.olMap.addLayer(mapLayer);
+    function test_addPolygons(){
+        var iconGeoms = new ol.geom.MultiPolygon([]);
+        $.getJSON("json/polygons.json",function (data) {
+            $.each(data.features,function(index,item){
+                var iconGeometry = new ol.format.WKT().readGeometry(item.geometry);
+                var iconFeature = new ol.Feature({
+                    geometry: iconGeometry
+                });
+                var iconStyle = new ol.style.Style({
+                    stroke: new ol.style.Stroke({width: 2, color: '#0000EE'})
+                });
+                iconFeature.setStyle(iconStyle);
+                iconGeoms.appendPolygon(iconGeometry);
+                vector.getSource().addFeature(iconFeature);
+            });
+            zoomToExtend(iconGeoms.getExtent());
+        })
+    }
+
+    function test_bindClickEvent(){
+        map.addEventListener('click', function(evt) {
+            var coordinate = evt.coordinate;
+            console.log(coordinate);
+            var hdms = ol.coordinate.toStringXY(coordinate);
+            //content.innerHTML = '<p>你点击的坐标是：</p><code>' + hdms + '</code>';
+            //overlay.setPosition(coordinate);
+            //map.addOverlay(overlay);
+        });
+        map.on('pointermove',function(e){
+            var pixel = map.getEventPixel(e.originalEvent);
+            var hit = map.hasFeatureAtPixel(pixel);
+            if(hit){
+                map.getTargetElement().style.cursor = 'pointer';
+            }
+            else{
+                map.getTargetElement().style.cursor = '';
             }
         });
     }
+
+    function test_addOverlay () {
+        var i = 1;var id = "111";
+        var coordinate = [115.4537241581,25.5924977655];
+        var marker = document.createElement('div');
+        marker.innerHTML = "<i>气泡所在位置，完善气泡的点击关闭事件</i>";
+        var iconOverlay = new ol.Overlay({
+            element: marker,
+            positioning: 'center-center',
+            id: id,
+            offset: [0, -10],
+            stopEvent: true
+        });
+        this.map.addOverlay(iconOverlay);
+        iconOverlay.setPosition(coordinate);
+    };
+
+    function changeSelectType(){
+        //选择对象
+        var select = null;
+        var selectClick = new ol.interaction.Select({
+            condition: ol.events.condition.click
+        });
+        selectClick .on('select', function(e) {
+            console.log(e);
+            console.log("click");
+        });
+        var selectPointerMove = new ol.interaction.Select({
+            condition: ol.events.condition.pointerMove
+        });
+        selectPointerMove .on('select', function(e) {
+            console.log(e);
+            if(e.selected.length>0)
+                console.log("//鼠标移入，选择了一个，大概是mouseover事件");
+            else if(e.deselected.length>0)
+                console.log("//鼠标移出，放弃选择，大概是mouseout事件功能");
+        });
+        var selectElement = document.getElementById('selecttype');
+        if (select !== null) {
+            map.removeInteraction(select);
+        }
+        var value = selectElement.value;
+        if (value == 'click') {
+            select = selectClick;
+        } else if (value == 'pointerMove') {
+            select = selectPointerMove;
+        } else {
+            select = null;
+        }
+        if (select !== null) {
+            console.log("选择高亮方式："+value);
+            map.addInteraction(select);
+        }
+    }
+
+    //参考 几种查询方式
+    function test_click_query(){
+        map.on('singleclick',mapClick);
+        function mapClick(evt){
+            var pixel = map.getEventPixel(evt.originalEvent);
+            var featureInfo = map.forEachFeatureAtPixel(pixel, function (feature, layer) {
+                return {feature:feature,layer:layer};
+            });
+            var coordinate = evt.coordinate;
+            var feature = featureInfo.feature;
+            var hdms = ol.coordinate.toStringHDMS(ol.proj.transform(coordinate, 'EPSG:3857', 'EPSG:4326'));
+            var properties = feature.getProperties();
+            console.log(properties); //从这里获取查询选择要素
+            if(feature!==undefined){
+                console.log( '<p>你点击的坐标是：</p><code>' + hdms + '</code><p>这里属于：'+ feature.get('name') + '</p><p>这里属于：'+ feature.getProperties() + '</p>');
+            }
+            else{
+                console.log('<p>你点击的坐标是：</p><code>' + hdms + '</code><p>这里是大海！</p>');
+            }
+            if (featureInfo!==undefined&&featureInfo!==null &&featureInfo.layer!==null) {
+                console.log('打印选择要素');
+                console.log(featureInfo.feature);
+                console.log('打印选择要素所属Layer');
+                console.log(featureInfo.layer);
+            }
+        }
+    }
+
+
+    function test_identify_query(){
+        map.addEventListener('click', function(evt) {
+            var coordinate = evt.coordinate;
+            var evt_map = evt.map;
+            var resolution = evt_map.getView().getResolution();
+            console.log("当前分辨率"+resolution);
+            //扩展i查询服务
+            var hdms = ol.coordinate.toStringXY(coordinate);
+            //content.innerHTML = '<p>你点击的坐标是：</p><code>' + hdms + '</code>';
+            //overlay.setPosition(coordinate);
+            //map.addOverlay(overlay);
+        });
+    }
+    var dragZoomInInteraction;
+    function test_drag_zoom_in(){
+        var dragzoomActive = true;
+        // 初始化一个拉框控件
+        dragZoomInInteraction = new ol.interaction.DragZoom({
+            condition: ol.events.condition.always,
+            out: false, // 此处为设置拉框完成时放大还是缩小
+        });
+        map.addInteraction(dragZoomInInteraction);
+        dragZoomInInteraction.setActive(dragzoomActive);
+    }
+    var dragZoomOutInteraction;
+    function test_drag_zoom_out(){
+        var dragzoomActive = true;
+        // 初始化一个拉框控件
+        dragZoomOutInteraction = new ol.interaction.DragZoom({
+            condition: ol.events.condition.always,
+            out: true, // 此处为设置拉框完成时放大还是缩小
+        });
+        map.addInteraction(dragZoomOutInteraction);
+        dragZoomOutInteraction.setActive(dragzoomActive);
+    }
+
+    var dragBoxInteraction;
+    function test_dragboxQuery(){
+        dragBoxInteraction = new ol.interaction.DragBox({
+            condition: ol.events.condition.always,
+        });
+        dragBoxInteraction.on('boxend', function() {
+            var info =[];
+            var extent = dragBoxInteraction.getGeometry().getExtent();
+            vector.getSource().forEachFeatureIntersectingExtent(extent, function(feature) {
+                console.log(feature.getProperties());
+                info.push(feature);
+            });
+            console.log(extent);
+        });
+        map.addInteraction(dragBoxInteraction);
+        dragBoxInteraction.setActive(true);
+    }
+
+    function changeLayer() {
+        var selectElement = document.getElementById('changelayer');
+        var value = selectElement.value;
+        if (value == 'baseLayer') {
+            baseLayer.setVisible(true);
+            satelliteLayer.setVisible(false);
+        } else if (value == 'satelliteLayer') {
+            baseLayer.setVisible(false);
+            satelliteLayer.setVisible(true);
+        } else {
+            baseLayer.setZIndex(8);
+            baseLayer.setVisible(true);
+            satelliteLayer.setZIndex(9);
+            satelliteLayer.setVisible(true);
+        }
+    }
+
+    function test_addwfs(){
+        $.getJSON( "json/arcgis.pjson",function (response) {
+            var iconGeoms = new ol.geom.MultiLineString([]);
+            $.each(response.features,function(index,item){
+                var iconGeometry = new ol.geom.LineString(item.geometry.paths[0]);
+                var iconFeature = new ol.Feature({
+                    geometry: iconGeometry
+                });
+                var iconStyle = new ol.style.Style({
+                    stroke: new ol.style.Stroke({width: 2, color: '#0000EE'})
+                });
+                iconFeature.setStyle(iconStyle);
+                iconGeoms.appendLineString(iconGeometry);
+                vector.getSource().addFeature(iconFeature);
+            });
+            zoomToExtend(iconGeoms.getExtent());
+        })
+    }
+
+    function test_clearZoomInteraction(){
+        if(dragZoomInInteraction != null){
+            console.log("dragZoomIn");
+            map.removeInteraction(dragZoomInInteraction);
+        }
+        if(dragZoomOutInteraction != null){
+            console.log("dragZoomOut");
+            map.removeInteraction(dragZoomOutInteraction);
+        }
+        if(dragBoxInteraction != null){
+            console.log("dragBox");
+            map.removeInteraction(dragBoxInteraction);
+        }
+    }
+
+    function test_measure(){
+        var measureTool = new ol.control.MeasureTool({
+            sphereradius : 6378137,//sphereradius
+        });
+        map.addControl(measureTool);
+    }
+    $(function () {
+        $("#btn-addPoints").click(function(){
+            test_addPoints();
+        });
+        $("#btn-addPolylines").click(function(){
+            test_addPolylines();
+        });
+        $("#btn-addPolygons").click(function(){
+            test_addPolygons();
+        });
+        $("#btn-clickEvent").click(function(){
+            test_bindClickEvent();
+        });
+        $("#btn-overlay").click(function(){
+            test_addOverlay();
+        })
+        $("#btn-singleclick-query").click(function(){
+            test_click_query();
+        })
+        $("#btn-click-identify-query").click(function(){
+            test_identify_query();
+        })
+        $("#btn-zoom-in").click(function(){
+            test_drag_zoom_in();
+        })
+        $("#btn-zoom-out").click(function(){
+            test_drag_zoom_out();
+        })
+        $("#btn-dragbox-query").click(function(){
+            test_dragboxQuery();
+        })
+        $("#btn-add-wfs").click(function(){
+            test_addwfs();
+        })
+        $("#btn-zoom-clear").click(function(){
+            test_clearZoomInteraction();
+        })
+        $("#btn-measure-tool").click(function(){
+            test_measure();
+        })
+    });
 </script>
+
+<script type="text/javascript" src="js/public/dragbox-wapper.js"> </script>
+
 </html>
